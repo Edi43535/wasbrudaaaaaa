@@ -1,47 +1,28 @@
-export default function Home() {
+export default function Page() {
   return (
-    <main
+    <div
       style={{
-        minHeight: "100vh",
-        margin: 0,
-        padding: "20px",
-        backgroundColor: "#111",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "red",
         color: "white",
-        fontFamily: "Arial, sans-serif",
+        textAlign: "center",
+        fontSize: "24px",
       }}
     >
-      <h1 style={{ textAlign: "center", marginBottom: "20px" }}>
-        Katzen-Galerie 🐱
-      </h1>
+      <p>Ich habe Hunger auf Pfannkuchen und Calvin ist faul</p>
 
-      <div
+      <img
+        src="https://placekitten.com/300/300"
+        alt="Katze"
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "16px",
+          marginTop: "20px",
+          borderRadius: "12px",
         }}
-      >
-        <img
-          src="https://placekitten.com/400/300"
-          alt="Süße Katze 1"
-          style={{ width: "100%", borderRadius: "12px", objectFit: "cover" }}
-        />
-        <img
-          src="https://placekitten.com/401/300"
-          alt="Süße Katze 2"
-          style={{ width: "100%", borderRadius: "12px", objectFit: "cover" }}
-        />
-        <img
-          src="https://placekitten.com/400/301"
-          alt="Süße Katze 3"
-          style={{ width: "100%", borderRadius: "12px", objectFit: "cover" }}
-        />
-        <img
-          src="https://placekitten.com/399/300"
-          alt="Süße Katze 4"
-          style={{ width: "100%", borderRadius: "12px", objectFit: "cover" }}
-        />
-      </div>
-    </main>
+      />
+    </div>
   );
 }
