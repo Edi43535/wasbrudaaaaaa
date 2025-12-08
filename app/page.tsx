@@ -1,7 +1,7 @@
 export default function Page() {
   return (
     <div>
-      Hello World
+      Hello World how are you EDVIN
     </div>
   );
 }
