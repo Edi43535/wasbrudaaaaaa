@@ -1,18 +1,18 @@
 export default function Home() {
   return (
-    <main
+    <div
       style={{
         backgroundColor: "red",
-        color: "white",
         height: "100vh",
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
+        color: "white",
         fontSize: "2rem",
-        textAlign: "center",
+        fontWeight: "bold"
       }}
     >
-      Ich habe Hunger auf Nutella und will schlafen gehen mit Calvin
-    </main>
+      Calvin ist eine faule Katze 🐱
+    </div>
   );
 }
