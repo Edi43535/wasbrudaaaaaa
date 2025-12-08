@@ -1,7 +1,18 @@
-export default function Page() {
+export default function Home() {
   return (
-    <div>
-      Hello World how are you EDVIN
-    </div>
+    <main
+      style={{
+        backgroundColor: "red",
+        color: "white",
+        height: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        fontSize: "2rem",
+        textAlign: "center",
+      }}
+    >
+      Ich habe Hunger auf Nutella und will schlafen gehen mit Calvin
+    </main>
   );
 }
