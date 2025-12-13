@@ -1,28 +1,22 @@
-export default function Page() {
+export default function Home() {
   return (
-    <div
+    <main
       style={{
-        height: "100vh",
+        minHeight: "100vh",
         display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "red",
-        color: "white",
+        justifyContent: "center",
+        padding: 24,
         textAlign: "center",
-        fontSize: "24px",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
       }}
     >
-      <p>Ich habe Hunger auf Pfannkuchen und Calvin ist faul</p>
-
-      <img
-        src="https://placekitten.com/300/300"
-        alt="Katze"
-        style={{
-          marginTop: "20px",
-          borderRadius: "12px",
-        }}
-      />
-    </div>
+      <div style={{ maxWidth: 700 }}>
+        <h1 style={{ fontSize: 40, margin: 0 }}>Halöoo Edvin 👋</h1>
+        <p style={{ fontSize: 22, marginTop: 14, lineHeight: 1.4 }}>
+          Wie geht es dir heute? Ich habe Lust zu essen 😄
+        </p>
+      </div>
+    </main>
   );
 }
