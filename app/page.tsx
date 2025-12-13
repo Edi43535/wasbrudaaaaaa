@@ -1,22 +1,20 @@
-export default function Home() {
+// app/page.tsx
+import React from "react";
+
+export default function Page() {
   return (
     <main
       style={{
-        minHeight: "100vh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 24,
-        textAlign: "center",
-        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        height: "100vh",
+        margin: 0,
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial",
       }}
     >
-      <div style={{ maxWidth: 700 }}>
-        <h1 style={{ fontSize: 40, margin: 0 }}>Halöoo Edvin 👋</h1>
-        <p style={{ fontSize: 22, marginTop: 14, lineHeight: 1.4 }}>
-          Wie geht es dir heute? Ich habe Lust zu essen 😄
-        </p>
-      </div>
+      <h1>Hello World</h1>
     </main>
   );
 }
