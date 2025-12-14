@@ -154,27 +154,44 @@ export default function Page() {
   if (!user) {
     return (
       <div style={loginWrapper}>
-        <div style={loginCard}>
-          <h1>💬 Campus Chat</h1>
-          <p style={{ color: "#666" }}>Login nur mit @hs-rm.de</p>
+        {/* Hochschule ganz oben */}
+        <div style={uniHeader}>
+          Hochschule RheinMain
+        </div>
 
-          <input
-            style={input}
-            placeholder="E-Mail (nur @hs-rm.de)"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+        <div style={loginContent}>
+          {/* Abgabe-Titel */}
+          <h1 style={submissionTitle}>
+            Abgabe Maschinelles Lernen<br />
+            von Edvin Jashari
+          </h1>
 
-          <input
-            style={input}
-            type="password"
-            placeholder="Passwort"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div style={loginCard}>
+            <h2>💬 Campus Chat</h2>
+            <p style={{ color: "#666" }}>Login nur mit @hs-rm.de</p>
 
-          <button style={primaryBtn} onClick={handleLogin}>Login</button>
-          <button style={secondaryBtn} onClick={handleRegister}>Registrieren</button>
+            <input
+              style={input}
+              placeholder="E-Mail (nur @hs-rm.de)"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <input
+              style={input}
+              type="password"
+              placeholder="Passwort"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <button style={primaryBtn} onClick={handleLogin}>
+              Login
+            </button>
+            <button style={secondaryBtn} onClick={handleRegister}>
+              Registrieren
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -186,7 +203,9 @@ export default function Page() {
       <div style={chatContainer}>
         <div style={chatHeader}>
           <button style={headerBtn} onClick={handleLogout}>Logout</button>
-          <button style={headerBtn} onClick={handlePasswordReset}>Passwort zurücksetzen</button>
+          <button style={headerBtn} onClick={handlePasswordReset}>
+            Passwort zurücksetzen
+          </button>
         </div>
 
         <div style={messagesBox}>
@@ -207,7 +226,10 @@ export default function Page() {
                 {m.text}
                 {isOwn && (
                   <div style={{ textAlign: "right" }}>
-                    <button style={deleteBtn} onClick={() => deleteMessage(m.id)}>
+                    <button
+                      style={deleteBtn}
+                      onClick={() => deleteMessage(m.id)}
+                    >
                       Löschen
                     </button>
                   </div>
@@ -225,7 +247,9 @@ export default function Page() {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
           />
-          <button style={sendBtn} onClick={pushMessage}>Senden</button>
+          <button style={sendBtn} onClick={pushMessage}>
+            Senden
+          </button>
         </div>
       </div>
     </div>
@@ -236,10 +260,32 @@ export default function Page() {
 
 const loginWrapper = {
   minHeight: "100vh",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
   background: "linear-gradient(135deg,#2563eb,#60a5fa)",
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "center",
+};
+
+const uniHeader = {
+  marginTop: 30,
+  fontSize: 22,
+  fontWeight: 600,
+  color: "#fff",
+};
+
+const loginContent = {
+  marginTop: 40,
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "center",
+};
+
+const submissionTitle = {
+  color: "#fff",
+  textAlign: "center" as const,
+  marginBottom: 30,
+  fontSize: 28,
+  fontWeight: 700,
 };
 
 const loginCard = {
