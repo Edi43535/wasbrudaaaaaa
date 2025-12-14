@@ -48,12 +48,10 @@ export default function Page() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 🔄 Auth-Status
-  useEffect(() => {
-    return onAuthStateChanged(auth, setUser);
-  }, []);
+  // 🔄 Auth
+  useEffect(() => onAuthStateChanged(auth, setUser), []);
 
-  // 🔄 Initiale 50 Nachrichten (sortiert in DB)
+  // 🔄 Initial Load
   useEffect(() => {
     if (!user) return;
 
@@ -78,7 +76,7 @@ export default function Page() {
     return () => off(q);
   }, [user]);
 
-  // 🔄 Weitere Nachrichten laden (Infinite Scroll)
+  // 🔄 Infinite Scroll
   async function loadMore() {
     if (!user || loadingMore || oldestTimestamp === null) return;
 
@@ -105,7 +103,7 @@ export default function Page() {
     setLoadingMore(false);
   }
 
-  // 👀 Debounced Infinite Scroll
+  // 👀 Debounce Scroll
   useEffect(() => {
     if (!bottomRef.current) return;
 
@@ -124,94 +122,132 @@ export default function Page() {
   async function handleLogin() {
     await signInWithEmailAndPassword(auth, email, password);
   }
-
   async function handleRegister() {
     await createUserWithEmailAndPassword(auth, email, password);
   }
-
   async function handleLogout() {
     await signOut(auth);
   }
-
   async function handlePasswordReset() {
     if (!user?.email) return;
     await sendPasswordResetEmail(auth, user.email);
     alert("Passwort-Reset-Mail gesendet");
   }
 
-  // ⬆️ Nachricht senden
+  // ⬆️ Message
   async function pushMessage() {
     if (!message.trim()) return;
-
     const db = getDatabase(auth.app);
     await push(ref(db, "messages"), {
       text: message,
       owner: user!.uid,
       timestamp: Date.now(),
     });
-
     setMessage("");
   }
 
-  // 🗑️ Eigene Nachricht löschen
   async function deleteMessage(id: string) {
     const db = getDatabase(auth.app);
     await remove(ref(db, `messages/${id}`));
   }
 
-  // ❌ Login-Seite
+  // ❌ LOGIN VIEW
   if (!user) {
     return (
-      <div style={{ textAlign: "center", marginTop: 60 }}>
-        <h1>Login</h1>
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "linear-gradient(135deg,#2563eb,#60a5fa)",
+        }}
+      >
+        <div
+          style={{
+            width: 380,
+            padding: 30,
+            borderRadius: 16,
+            background: "#fff",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+            textAlign: "center",
+          }}
+        >
+          <h1 style={{ marginBottom: 10 }}>💬 Campus Chat</h1>
+          <p style={{ color: "#555", marginBottom: 20 }}>
+            Login nur mit Hochschul-Mail
+          </p>
 
-        <input placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <br /><br />
-        <input type="password" placeholder="Passwort" value={password} onChange={(e) => setPassword(e.target.value)} />
-        <br /><br />
+          <input
+            style={inputStyle}
+            type="email"
+            placeholder="E-Mail (nur @hs-rm.de)"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
-        <button onClick={handleLogin}>Login</button>
-        <button onClick={handleRegister} style={{ marginLeft: 10 }}>
-          Register
-        </button>
+          <input
+            style={inputStyle}
+            type="password"
+            placeholder="Passwort"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <button style={primaryBtn} onClick={handleLogin}>
+            Login
+          </button>
+
+          <button style={secondaryBtn} onClick={handleRegister}>
+            Registrieren
+          </button>
+        </div>
       </div>
     );
   }
 
-  // ✅ Chat
+  // ✅ CHAT VIEW
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      <div style={{ textAlign: "right", padding: 10 }}>
-        <button onClick={handleLogout}>Logout</button>
-        <button onClick={handlePasswordReset} style={{ marginLeft: 10 }}>
+      <div style={{ padding: 10, textAlign: "right", background: "#2563eb" }}>
+        <button style={headerBtn} onClick={handleLogout}>Logout</button>
+        <button style={headerBtn} onClick={handlePasswordReset}>
           Passwort zurücksetzen
         </button>
       </div>
 
-      <div style={{ flex: 8, overflowY: "auto", padding: 10 }}>
+      <div
+        style={{
+          flex: 8,
+          overflowY: "auto",
+          padding: 15,
+          display: "flex",
+          flexDirection: "column",
+          background: "#f8fafc",
+        }}
+      >
         {messages.map((m) => {
           const isOwn = m.owner === user.uid;
-
           return (
             <div
               key={m.id}
               style={{
-                marginBottom: 8,
-                padding: "8px 12px",
-                borderRadius: 10,
-                maxWidth: "70%",
-                background: isOwn ? "#dbeafe" : "#f1f5f9",
                 alignSelf: isOwn ? "flex-end" : "flex-start",
+                background: isOwn ? "#bfdbfe" : "#e5e7eb",
+                padding: "10px 14px",
+                borderRadius: 14,
+                marginBottom: 8,
+                maxWidth: "70%",
               }}
             >
-              <strong>{isOwn ? "Ich" : "User"}:</strong> {m.text}
-
+              <div>{m.text}</div>
               {isOwn && (
-                <div style={{ textAlign: "right" }}>
-                  <button onClick={() => deleteMessage(m.id)} style={{ fontSize: 12 }}>
-                    Löschen
-                  </button>
-                </div>
+                <button
+                  style={{ fontSize: 12, marginTop: 4 }}
+                  onClick={() => deleteMessage(m.id)}
+                >
+                  Löschen
+                </button>
               )}
             </div>
           );
@@ -219,10 +255,53 @@ export default function Page() {
         <div ref={bottomRef} />
       </div>
 
-      <div style={{ flex: 2, display: "flex", gap: 10, padding: 10 }}>
-        <input style={{ flex: 1 }} value={message} onChange={(e) => setMessage(e.target.value)} />
-        <button onClick={pushMessage}>Upload</button>
+      <div style={{ padding: 10, display: "flex", gap: 10 }}>
+        <input
+          style={{ ...inputStyle, flex: 1 }}
+          placeholder="Nachricht schreiben..."
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+        />
+        <button style={primaryBtn} onClick={pushMessage}>
+          Senden
+        </button>
       </div>
     </div>
   );
 }
+
+/* 🎨 Styles */
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: 12,
+  marginBottom: 12,
+  borderRadius: 10,
+  border: "1px solid #ccc",
+  fontSize: 15,
+};
+
+const primaryBtn: React.CSSProperties = {
+  width: "100%",
+  padding: 12,
+  background: "#2563eb",
+  color: "#fff",
+  borderRadius: 10,
+  border: "none",
+  fontSize: 16,
+  marginBottom: 10,
+  cursor: "pointer",
+};
+
+const secondaryBtn: React.CSSProperties = {
+  ...primaryBtn,
+  background: "#e5e7eb",
+  color: "#000",
+};
+
+const headerBtn: React.CSSProperties = {
+  marginLeft: 10,
+  padding: "6px 10px",
+  borderRadius: 8,
+  border: "none",
+  cursor: "pointer",
+};
