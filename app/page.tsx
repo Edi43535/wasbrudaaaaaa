@@ -47,6 +47,14 @@ export default function Page() {
   const [oldestTimestamp, setOldestTimestamp] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  /* 🕒 LIVE-UHR */
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -229,6 +237,17 @@ export default function Page() {
   return (
     <div style={appWrapper}>
       <div style={chatContainer}>
+        {/* 🕒 LIVE-UHR */}
+        <div style={clockBar}>
+          {now.toLocaleDateString("de-DE", {
+            weekday: "long",
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })}{" "}
+          – {now.toLocaleTimeString("de-DE")}
+        </div>
+
         <div style={chatHeader}>
           <button style={headerBtn} onClick={handleLogout}>Logout</button>
           <button style={headerBtn} onClick={handlePasswordReset}>
@@ -236,7 +255,6 @@ export default function Page() {
           </button>
         </div>
 
-        {/* ✅ Freundlicher Hinweis */}
         <div style={chatNotice}>
           💬 Bitte bleibt freundlich und respektvoll 💙
         </div>
@@ -291,7 +309,16 @@ export default function Page() {
   );
 }
 
-/* 🎨 STYLES */
+/* 🎨 STYLES – NUR ERGÄNZT */
+
+const clockBar = {
+  textAlign: "center" as const,
+  padding: "10px 12px",
+  fontSize: 14,
+  fontWeight: 600,
+  background: "rgba(0,0,0,0.04)",
+  borderBottom: "1px solid #e5e7eb",
+};
 
 const chatNotice = {
   textAlign: "center" as const,
@@ -302,6 +329,8 @@ const chatNotice = {
   background: "rgba(254, 215, 170, 0.6)",
   borderBottom: "1px solid #fed7aa",
 };
+
+/* ⬇️ ALLES DARUNTER UNVERÄNDERT */
 
 const loginWrapper = {
   minHeight: "100vh",
