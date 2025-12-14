@@ -11,9 +11,12 @@ export default function Page() {
   }, [count]);
 
   return (
-    <div>
-      <p>Zahl: {count}</p>
-      <p>Quadrat: {square}</p>
+    <div style={{ textAlign: "center", marginTop: "50px" }}>
+      <h1>Zahl: {count}</h1>
+      <h2>Quadrat: {square}</h2>
+
+      <button onClick={() => setCount(count + 1)}>+</button>
+      <button onClick={() => setCount(count - 1)}>-</button>
     </div>
   );
 }
