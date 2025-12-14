@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -18,15 +18,12 @@ import {
   orderByChild,
   limitToLast,
   endAt,
-  startAt,
   onChildAdded,
+  off,
   remove,
-  get,
 } from "firebase/database";
 
 import { auth } from "./config/firebase";
-
-/* ================= TYPES ================= */
 
 type Message = {
   id: string;
@@ -37,12 +34,8 @@ type Message = {
 
 const PAGE_SIZE = 50;
 
-/* ================= COMPONENT ================= */
-
 export default function Page() {
   const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -50,149 +43,83 @@ export default function Page() {
   const [message, setMessage] = useState("");
 
   const [oldestTimestamp, setOldestTimestamp] = useState<number | null>(null);
-  const [latestTimestamp, setLatestTimestamp] = useState<number | null>(null);
-
   const [loadingMore, setLoadingMore] = useState(false);
-  const [busyAuth, setBusyAuth] = useState(false);
-  const [error, setError] = useState("");
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /* ================= AUTH ================= */
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setAuthLoading(false);
-    });
-    return () => unsub();
-  }, []);
-
-  /* ================= INITIAL + REALTIME LOAD ================= */
+  useEffect(() => onAuthStateChanged(auth, setUser), []);
 
   useEffect(() => {
     if (!user) return;
 
     const db = getDatabase(auth.app);
-    const baseRef = ref(db, "messages");
+    const q = query(
+      ref(db, "messages"),
+      orderByChild("timestamp"),
+      limitToLast(PAGE_SIZE)
+    );
 
-    let unsubscribeNew: null | (() => void) = null;
-    let cancelled = false;
+    setMessages([]);
+    setOldestTimestamp(null);
 
-    async function initialLoad() {
-      setMessages([]);
-      setOldestTimestamp(null);
-      setLatestTimestamp(null);
+    onChildAdded(q, (snap) => {
+      const msg = { id: snap.key!, ...snap.val() };
+      setMessages((prev) => [...prev, msg]);
+      setOldestTimestamp((prev) =>
+        prev === null ? msg.timestamp : Math.min(prev, msg.timestamp)
+      );
+    });
 
-      const qInitial = query(baseRef, orderByChild("timestamp"), limitToLast(PAGE_SIZE));
-      const snap = await get(qInitial);
-      if (cancelled) return;
-
-      const list: Message[] = [];
-      snap.forEach((c) => {
-        const v = c.val();
-        list.push({
-          id: c.key!,
-          text: v.text,
-          owner: v.owner,
-          timestamp: v.timestamp,
-        });
-      });
-
-      list.sort((a, b) => a.timestamp - b.timestamp);
-      setMessages(list);
-
-      if (list.length > 0) {
-        const latest = list[list.length - 1].timestamp;
-        setOldestTimestamp(list[0].timestamp);
-        setLatestTimestamp(latest);
-
-        const qNew = query(baseRef, orderByChild("timestamp"), startAt(latest + 1));
-        unsubscribeNew = onChildAdded(qNew, (s) => {
-          const v = s.val();
-          setMessages((prev) =>
-            prev.some((m) => m.id === s.key)
-              ? prev
-              : [...prev, { id: s.key!, ...v }]
-          );
-          setLatestTimestamp((p) => Math.max(p ?? 0, v.timestamp));
-        });
-      }
-    }
-
-    initialLoad();
-
-    return () => {
-      cancelled = true;
-      if (unsubscribeNew) unsubscribeNew();
-    };
+    return () => off(q);
   }, [user]);
-
-  /* ================= LOAD OLDER ================= */
 
   async function loadMore() {
     if (!user || loadingMore || oldestTimestamp === null) return;
+
     setLoadingMore(true);
 
     const db = getDatabase(auth.app);
-    const qMore = query(
+    const q = query(
       ref(db, "messages"),
       orderByChild("timestamp"),
       endAt(oldestTimestamp - 1),
       limitToLast(PAGE_SIZE)
     );
 
-    const snap = await get(qMore);
-    const older: Message[] = [];
-    snap.forEach((c) => older.push({ id: c.key!, ...c.val() }));
-    older.sort((a, b) => a.timestamp - b.timestamp);
+    onChildAdded(q, (snap) => {
+      const msg = { id: snap.key!, ...snap.val() };
+      setMessages((prev) =>
+        prev.some((m) => m.id === msg.id) ? prev : [msg, ...prev]
+      );
+      setOldestTimestamp((prev) =>
+        prev === null ? msg.timestamp : Math.min(prev, msg.timestamp)
+      );
+    });
 
-    if (older.length > 0) {
-      setMessages((prev) => [...older, ...prev]);
-      setOldestTimestamp(older[0].timestamp);
-    }
     setLoadingMore(false);
   }
 
-  /* ================= SCROLL ================= */
-
   useEffect(() => {
     if (!bottomRef.current) return;
-    const obs = new IntersectionObserver((e) => {
-      if (e[0].isIntersecting) {
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(loadMore, 200);
+        debounceRef.current = setTimeout(loadMore, 300);
       }
     });
-    obs.observe(bottomRef.current);
-    return () => obs.disconnect();
+
+    observer.observe(bottomRef.current);
+    return () => observer.disconnect();
   }, [oldestTimestamp]);
 
-  /* ================= ACTIONS ================= */
-
   async function handleLogin() {
-    setBusyAuth(true);
-    setError("");
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch {
-      setError("Login fehlgeschlagen: E-Mail oder Passwort falsch.");
-    } finally {
-      setBusyAuth(false);
-    }
+    await signInWithEmailAndPassword(auth, email, password);
   }
 
   async function handleRegister() {
-    setBusyAuth(true);
-    setError("");
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-    } catch {
-      setError("Registrierung fehlgeschlagen.");
-    } finally {
-      setBusyAuth(false);
-    }
+    await createUserWithEmailAndPassword(auth, email, password);
   }
 
   async function handleLogout() {
@@ -207,12 +134,14 @@ export default function Page() {
 
   async function pushMessage() {
     if (!message.trim()) return;
+
     const db = getDatabase(auth.app);
     await push(ref(db, "messages"), {
       text: message,
       owner: user!.uid,
       timestamp: Date.now(),
     });
+
     setMessage("");
   }
 
@@ -221,80 +150,85 @@ export default function Page() {
     await remove(ref(db, `messages/${id}`));
   }
 
-  /* ================= RENDER ================= */
-
-  if (authLoading) {
-    return <div className="center">Lade Anwendung…</div>;
-  }
-
+  /* LOGIN */
   if (!user) {
     return (
-      <div className="loginBg">
-        <h1>Hochschule RheinMain</h1>
-        <h2>Abgabe Maschinelles Lernen</h2>
-        <p>von Edvin Jashari</p>
+      <div style={loginWrapper}>
+        <div style={uniHeader}>Hochschule RheinMain</div>
 
-        <div className="card">
-          {error && <div className="alert">{error}</div>}
-          <input
-            className="input"
-            placeholder="E-Mail (nur @hs-rm.de)"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <input
-            className="input"
-            type="password"
-            placeholder="Passwort"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <button className="btnPrimary" onClick={handleLogin} disabled={busyAuth}>
-            Login
-          </button>
-          <button className="btnOutline" onClick={handleRegister} disabled={busyAuth}>
-            Registrieren
-          </button>
+        <div style={loginContent}>
+          <h1 style={submissionTitle}>
+            Abgabe Maschinelles Lernen<br />
+            von Edvin Jashari
+          </h1>
+
+          <div style={loginCard}>
+            <h2>💬 Campus Chat</h2>
+            <p style={{ color: "#666" }}>Login nur mit @hs-rm.de</p>
+
+            <input
+              style={input}
+              placeholder="E-Mail (nur @hs-rm.de)"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <input
+              style={input}
+              type="password"
+              placeholder="Passwort"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <button style={primaryBtn} onClick={handleLogin}>
+              Login
+            </button>
+            <button style={secondaryBtn} onClick={handleRegister}>
+              Registrieren
+            </button>
+          </div>
         </div>
-
-        <Styles />
       </div>
     );
   }
 
-  const sortedMessages = useMemo(
-    () => [...messages].sort((a, b) => a.timestamp - b.timestamp),
-    [messages]
-  );
-
+  /* CHAT */
   return (
-    <div className="chatPage">
-      <div className="chatShell">
-        <div className="chatTop">
-          <div>
-            <b>Campus Chat</b>
-            <div className="small">Eingeloggt als {user.email}</div>
-          </div>
-          <div>
-            <button className="btnOutline" onClick={handlePasswordReset}>
-              Passwort
-            </button>
-            <button className="btnDanger" onClick={handleLogout}>
-              Logout
-            </button>
-          </div>
+    <div style={appWrapper}>
+      <div style={chatContainer}>
+        <div style={chatHeader}>
+          <button style={headerBtn} onClick={handleLogout}>Logout</button>
+          <button style={headerBtn} onClick={handlePasswordReset}>
+            Passwort zurücksetzen
+          </button>
         </div>
 
-        <div className="chatBody">
-          {sortedMessages.map((m) => {
-            const own = m.owner === user.uid;
+        <div style={messagesBox}>
+          {messages.map((m) => {
+            const isOwn = m.owner === user.uid;
             return (
-              <div key={m.id} className={`bubble ${own ? "own" : "other"}`}>
+              <div
+                key={m.id}
+                style={{
+                  alignSelf: isOwn ? "flex-end" : "flex-start",
+                  background: isOwn ? "#bfdbfe" : "#e5e7eb",
+                  padding: "10px 14px",
+                  borderRadius: 14,
+                  marginBottom: 8,
+                  maxWidth: "75%",
+                }}
+              >
                 {m.text}
-                {own && (
-                  <button className="link" onClick={() => deleteMessage(m.id)}>
-                    Löschen
-                  </button>
+                {isOwn && (
+                  <div style={{ textAlign: "right" }}>
+                    <button
+                      style={deleteBtn}
+                      onClick={() => deleteMessage(m.id)}
+                    >
+                      Löschen
+                    </button>
+                  </div>
                 )}
               </div>
             );
@@ -302,167 +236,161 @@ export default function Page() {
           <div ref={bottomRef} />
         </div>
 
-        <div className="composer">
+        <div style={inputBar}>
           <textarea
-            className="textarea"
+            style={chatInput}
+            placeholder="Nachricht schreiben…"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Nachricht schreiben…"
           />
-          <button className="btnPrimary" onClick={pushMessage}>
+          <button style={sendBtn} onClick={pushMessage}>
             Senden
           </button>
         </div>
       </div>
-
-      <Styles />
     </div>
   );
 }
 
-/* ================= STYLES ================= */
+/* 🎨 STYLES */
 
-function Styles() {
-  return (
-    <style jsx global>{`
-      body { margin: 0; font-family: system-ui, sans-serif; }
+const loginWrapper = {
+  minHeight: "100vh",
+  background: "linear-gradient(135deg,#2563eb,#60a5fa)",
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "center",
+};
 
-      .center { height: 100vh; display: flex; align-items: center; justify-content: center; }
+const uniHeader = {
+  marginTop: 30,
+  fontSize: 22,
+  fontWeight: 600,
+  color: "#fff",
+};
 
-      .loginBg {
-        min-height: 100vh;
-        background: linear-gradient(135deg, #2563eb, #60a5fa);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        gap: 10px;
-      }
+const loginContent = {
+  marginTop: 40,
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "center",
+};
 
-      .card {
-        background: white;
-        padding: 24px;
-        border-radius: 16px;
-        width: 360px;
-        color: black;
-      }
+const submissionTitle = {
+  color: "#fff",
+  textAlign: "center" as const,
+  marginBottom: 30,
+  fontSize: 28,
+  fontWeight: 700,
+};
 
-      .input {
-        width: 100%;
-        padding: 12px;
-        margin-bottom: 10px;
-      }
+const loginCard = {
+  width: 380,
+  padding: 30,
+  background: "#fff",
+  borderRadius: 16,
+  boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+  textAlign: "center" as const,
+};
 
-      .btnPrimary {
-        width: 100%;
-        padding: 12px;
-        background: #2563eb;
-        color: white;
-        border: none;
-        margin-top: 6px;
-        cursor: pointer;
-      }
+/* 🔴 NUR HIER GEÄNDERT */
+const appWrapper = {
+  minHeight: "100vh",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  background: "linear-gradient(135deg,#7f1d1d,#dc2626)",
+};
 
-      .btnOutline {
-        width: 100%;
-        padding: 12px;
-        margin-top: 6px;
-        background: white;
-        border: 1px solid #2563eb;
-        color: #2563eb;
-        cursor: pointer;
-      }
+const chatContainer = {
+  width: "100%",
+  maxWidth: 700,
+  height: "85vh",
+  background: "#fff",
+  borderRadius: 18,
+  boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+  display: "flex",
+  flexDirection: "column" as const,
+};
 
-      .alert {
-        background: #fee2e2;
-        padding: 10px;
-        margin-bottom: 10px;
-      }
+const chatHeader = {
+  padding: 12,
+  borderBottom: "1px solid #e5e7eb",
+  textAlign: "right" as const,
+};
 
-      /* 🔴 Roter Chat-Hintergrund */
-      .chatPage {
-        min-height: 100vh;
-        background: linear-gradient(135deg, #7f1d1d, #dc2626);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-      }
+const messagesBox = {
+  flex: 1,
+  padding: 14,
+  overflowY: "auto" as const,
+  display: "flex",
+  flexDirection: "column" as const,
+  background: "#f8fafc",
+};
 
-      .chatShell {
-        width: 700px;
-        height: 85vh;
-        background: white;
-        border-radius: 18px;
-        display: flex;
-        flex-direction: column;
-      }
+const inputBar = {
+  display: "flex",
+  gap: 10,
+  padding: 12,
+  borderTop: "1px solid #e5e7eb",
+};
 
-      .chatTop {
-        background: #991b1b;
-        color: white;
-        padding: 12px;
-        display: flex;
-        justify-content: space-between;
-      }
+const input = {
+  width: "100%",
+  padding: 12,
+  marginBottom: 12,
+  borderRadius: 10,
+  border: "1px solid #ccc",
+};
 
-      .chatBody {
-        flex: 1;
-        padding: 12px;
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
+const chatInput = {
+  flex: 1,
+  minHeight: 60,
+  resize: "none" as const,
+  borderRadius: 10,
+  padding: 10,
+  border: "1px solid #ccc",
+};
 
-      .bubble {
-        max-width: 70%;
-        padding: 10px;
-        border-radius: 12px;
-      }
+const primaryBtn = {
+  width: "100%",
+  padding: 12,
+  background: "#2563eb",
+  color: "#fff",
+  border: "none",
+  borderRadius: 10,
+  cursor: "pointer",
+  marginBottom: 10,
+};
 
-      .bubble.own {
-        align-self: flex-end;
-        background: #fecaca;
-      }
+const secondaryBtn = {
+  ...primaryBtn,
+  background: "#e5e7eb",
+  color: "#000",
+};
 
-      .bubble.other {
-        align-self: flex-start;
-        background: #e5e7eb;
-      }
+const sendBtn = {
+  padding: "0 18px",
+  background: "#2563eb",
+  color: "#fff",
+  borderRadius: 10,
+  border: "none",
+  cursor: "pointer",
+};
 
-      .link {
-        background: none;
-        border: none;
-        color: #7f1d1d;
-        font-size: 12px;
-        cursor: pointer;
-        margin-top: 4px;
-      }
+const headerBtn = {
+  marginLeft: 8,
+  padding: "6px 10px",
+  borderRadius: 8,
+  border: "none",
+  cursor: "pointer",
+};
 
-      .composer {
-        display: flex;
-        gap: 10px;
-        padding: 12px;
-        border-top: 1px solid #ddd;
-      }
-
-      .textarea {
-        flex: 1;
-        min-height: 60px;
-      }
-
-      .small { font-size: 12px; opacity: 0.8; }
-
-      .btnDanger {
-        background: #7f1d1d;
-        color: white;
-        border: none;
-        padding: 8px 12px;
-        margin-left: 6px;
-        cursor: pointer;
-      }
-    `}</style>
-  );
-}
+const deleteBtn = {
+  fontSize: 12,
+  marginTop: 4,
+  background: "transparent",
+  border: "none",
+  color: "#1d4ed8",
+  cursor: "pointer",
+};
