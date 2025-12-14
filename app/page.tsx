@@ -9,21 +9,70 @@ import {
   User,
 } from "firebase/auth";
 
-import { auth } from "./config/firebase";
+import {
+  ref,
+  push,
+  onChildAdded,
+  onChildChanged,
+  onChildRemoved,
+  off,
+} from "firebase/database";
+
+import { auth, db } from "./config/firebase";
+
+type Message = {
+  id: string;
+  text: string;
+  owner: string;
+  timestamp: number;
+};
 
 export default function Page() {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // 🔄 Prüfen, ob Nutzer schon eingeloggt ist
+  // 🔹 Realtime-States
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [message, setMessage] = useState("");
+
+  // 🔄 Auth-Status prüfen
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
     });
-
     return () => unsubscribe();
   }, []);
+
+  // 🔄 Realtime Database Listener
+  useEffect(() => {
+    if (!user) return;
+
+    const messagesRef = ref(db, "messages");
+
+    onChildAdded(messagesRef, (snapshot) => {
+      setMessages((prev) => [
+        ...prev,
+        { id: snapshot.key!, ...snapshot.val() },
+      ]);
+    });
+
+    onChildChanged(messagesRef, (snapshot) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === snapshot.key
+            ? { id: snapshot.key!, ...snapshot.val() }
+            : m
+        )
+      );
+    });
+
+    onChildRemoved(messagesRef, (snapshot) => {
+      setMessages((prev) => prev.filter((m) => m.id !== snapshot.key));
+    });
+
+    return () => off(messagesRef);
+  }, [user]);
 
   // 🔐 Login
   async function handleLogin() {
@@ -40,7 +89,20 @@ export default function Page() {
     await signOut(auth);
   }
 
-  // FALL 1: NICHT eingeloggt
+  // ⬆️ Nachricht hochladen
+  async function pushMessage() {
+    if (!message.trim()) return;
+
+    await push(ref(db, "messages"), {
+      text: message,
+      owner: user!.uid,
+      timestamp: Date.now(),
+    });
+
+    setMessage("");
+  }
+
+  // ❌ NICHT eingeloggt
   if (!user) {
     return (
       <div style={{ textAlign: "center", marginTop: "50px" }}>
@@ -70,13 +132,48 @@ export default function Page() {
     );
   }
 
-  // FALL 2: Eingeloggt
+  // ✅ Eingeloggt
   return (
-    <div style={{ textAlign: "center", marginTop: "50px" }}>
-      <h1>Willkommen</h1>
-      <p>Eingeloggt als: {user.email}</p>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      {/* Logout oben rechts */}
+      <div style={{ textAlign: "right", padding: "10px" }}>
+        <button onClick={handleLogout}>Logout</button>
+      </div>
 
-      <button onClick={handleLogout}>Logout</button>
+      {/* Nachrichten (80%) */}
+      <div
+        style={{
+          flex: 8,
+          overflowY: "auto",
+          padding: "10px",
+          border: "1px solid #ccc",
+        }}
+      >
+        {messages.map((m) => (
+          <div key={m.id} style={{ marginBottom: "8px" }}>
+            <strong>{m.owner === user.uid ? "Ich" : "User"}:</strong>{" "}
+            {m.text}
+          </div>
+        ))}
+      </div>
+
+      {/* Input unten */}
+      <div
+        style={{
+          flex: 2,
+          display: "flex",
+          padding: "10px",
+          gap: "10px",
+        }}
+      >
+        <input
+          style={{ flex: 1 }}
+          placeholder="Nachricht eingeben..."
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+        />
+        <button onClick={pushMessage}>Upload</button>
+      </div>
     </div>
   );
 }
