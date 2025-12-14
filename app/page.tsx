@@ -48,10 +48,8 @@ export default function Page() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 🔄 Auth
   useEffect(() => onAuthStateChanged(auth, setUser), []);
 
-  // 🔄 Initial Load
   useEffect(() => {
     if (!user) return;
 
@@ -76,7 +74,6 @@ export default function Page() {
     return () => off(q);
   }, [user]);
 
-  // 🔄 Infinite Scroll
   async function loadMore() {
     if (!user || loadingMore || oldestTimestamp === null) return;
 
@@ -103,7 +100,6 @@ export default function Page() {
     setLoadingMore(false);
   }
 
-  // 👀 Debounce Scroll
   useEffect(() => {
     if (!bottomRef.current) return;
 
@@ -118,31 +114,34 @@ export default function Page() {
     return () => observer.disconnect();
   }, [oldestTimestamp]);
 
-  // 🔐 Auth
   async function handleLogin() {
     await signInWithEmailAndPassword(auth, email, password);
   }
+
   async function handleRegister() {
     await createUserWithEmailAndPassword(auth, email, password);
   }
+
   async function handleLogout() {
     await signOut(auth);
   }
+
   async function handlePasswordReset() {
     if (!user?.email) return;
     await sendPasswordResetEmail(auth, user.email);
     alert("Passwort-Reset-Mail gesendet");
   }
 
-  // ⬆️ Message
   async function pushMessage() {
     if (!message.trim()) return;
+
     const db = getDatabase(auth.app);
     await push(ref(db, "messages"), {
       text: message,
       owner: user!.uid,
       timestamp: Date.now(),
     });
+
     setMessage("");
   }
 
@@ -151,157 +150,204 @@ export default function Page() {
     await remove(ref(db, `messages/${id}`));
   }
 
-  // ❌ LOGIN VIEW
+  /* LOGIN */
   if (!user) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "linear-gradient(135deg,#2563eb,#60a5fa)",
-        }}
-      >
-        <div
-          style={{
-            width: 380,
-            padding: 30,
-            borderRadius: 16,
-            background: "#fff",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
-            textAlign: "center",
-          }}
-        >
-          <h1 style={{ marginBottom: 10 }}>💬 Campus Chat</h1>
-          <p style={{ color: "#555", marginBottom: 20 }}>
-            Login nur mit Hochschul-Mail
-          </p>
+      <div style={loginWrapper}>
+        <div style={loginCard}>
+          <h1>💬 Campus Chat</h1>
+          <p style={{ color: "#666" }}>Login nur mit @hs-rm.de</p>
 
           <input
-            style={inputStyle}
-            type="email"
+            style={input}
             placeholder="E-Mail (nur @hs-rm.de)"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
 
           <input
-            style={inputStyle}
+            style={input}
             type="password"
             placeholder="Passwort"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          <button style={primaryBtn} onClick={handleLogin}>
-            Login
-          </button>
-
-          <button style={secondaryBtn} onClick={handleRegister}>
-            Registrieren
-          </button>
+          <button style={primaryBtn} onClick={handleLogin}>Login</button>
+          <button style={secondaryBtn} onClick={handleRegister}>Registrieren</button>
         </div>
       </div>
     );
   }
 
-  // ✅ CHAT VIEW
+  /* CHAT */
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: 10, textAlign: "right", background: "#2563eb" }}>
-        <button style={headerBtn} onClick={handleLogout}>Logout</button>
-        <button style={headerBtn} onClick={handlePasswordReset}>
-          Passwort zurücksetzen
-        </button>
-      </div>
+    <div style={appWrapper}>
+      <div style={chatContainer}>
+        <div style={chatHeader}>
+          <button style={headerBtn} onClick={handleLogout}>Logout</button>
+          <button style={headerBtn} onClick={handlePasswordReset}>Passwort zurücksetzen</button>
+        </div>
 
-      <div
-        style={{
-          flex: 8,
-          overflowY: "auto",
-          padding: 15,
-          display: "flex",
-          flexDirection: "column",
-          background: "#f8fafc",
-        }}
-      >
-        {messages.map((m) => {
-          const isOwn = m.owner === user.uid;
-          return (
-            <div
-              key={m.id}
-              style={{
-                alignSelf: isOwn ? "flex-end" : "flex-start",
-                background: isOwn ? "#bfdbfe" : "#e5e7eb",
-                padding: "10px 14px",
-                borderRadius: 14,
-                marginBottom: 8,
-                maxWidth: "70%",
-              }}
-            >
-              <div>{m.text}</div>
-              {isOwn && (
-                <button
-                  style={{ fontSize: 12, marginTop: 4 }}
-                  onClick={() => deleteMessage(m.id)}
-                >
-                  Löschen
-                </button>
-              )}
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
+        <div style={messagesBox}>
+          {messages.map((m) => {
+            const isOwn = m.owner === user.uid;
+            return (
+              <div
+                key={m.id}
+                style={{
+                  alignSelf: isOwn ? "flex-end" : "flex-start",
+                  background: isOwn ? "#bfdbfe" : "#e5e7eb",
+                  padding: "10px 14px",
+                  borderRadius: 14,
+                  marginBottom: 8,
+                  maxWidth: "75%",
+                }}
+              >
+                {m.text}
+                {isOwn && (
+                  <div style={{ textAlign: "right" }}>
+                    <button style={deleteBtn} onClick={() => deleteMessage(m.id)}>
+                      Löschen
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
 
-      <div style={{ padding: 10, display: "flex", gap: 10 }}>
-        <input
-          style={{ ...inputStyle, flex: 1 }}
-          placeholder="Nachricht schreiben..."
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-        />
-        <button style={primaryBtn} onClick={pushMessage}>
-          Senden
-        </button>
+        <div style={inputBar}>
+          <textarea
+            style={chatInput}
+            placeholder="Nachricht schreiben…"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+          />
+          <button style={sendBtn} onClick={pushMessage}>Senden</button>
+        </div>
       </div>
     </div>
   );
 }
 
-/* 🎨 Styles */
-const inputStyle: React.CSSProperties = {
+/* 🎨 STYLES */
+
+const loginWrapper = {
+  minHeight: "100vh",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  background: "linear-gradient(135deg,#2563eb,#60a5fa)",
+};
+
+const loginCard = {
+  width: 380,
+  padding: 30,
+  background: "#fff",
+  borderRadius: 16,
+  boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+  textAlign: "center" as const,
+};
+
+const appWrapper = {
+  minHeight: "100vh",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  background: "#f1f5f9",
+};
+
+const chatContainer = {
+  width: "100%",
+  maxWidth: 700,
+  height: "85vh",
+  background: "#fff",
+  borderRadius: 18,
+  boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+  display: "flex",
+  flexDirection: "column" as const,
+};
+
+const chatHeader = {
+  padding: 12,
+  borderBottom: "1px solid #e5e7eb",
+  textAlign: "right" as const,
+};
+
+const messagesBox = {
+  flex: 1,
+  padding: 14,
+  overflowY: "auto" as const,
+  display: "flex",
+  flexDirection: "column" as const,
+  background: "#f8fafc",
+};
+
+const inputBar = {
+  display: "flex",
+  gap: 10,
+  padding: 12,
+  borderTop: "1px solid #e5e7eb",
+};
+
+const input = {
   width: "100%",
   padding: 12,
   marginBottom: 12,
   borderRadius: 10,
   border: "1px solid #ccc",
-  fontSize: 15,
 };
 
-const primaryBtn: React.CSSProperties = {
+const chatInput = {
+  flex: 1,
+  minHeight: 60,
+  resize: "none" as const,
+  borderRadius: 10,
+  padding: 10,
+  border: "1px solid #ccc",
+};
+
+const primaryBtn = {
   width: "100%",
   padding: 12,
   background: "#2563eb",
   color: "#fff",
-  borderRadius: 10,
   border: "none",
-  fontSize: 16,
-  marginBottom: 10,
+  borderRadius: 10,
   cursor: "pointer",
+  marginBottom: 10,
 };
 
-const secondaryBtn: React.CSSProperties = {
+const secondaryBtn = {
   ...primaryBtn,
   background: "#e5e7eb",
   color: "#000",
 };
 
-const headerBtn: React.CSSProperties = {
-  marginLeft: 10,
+const sendBtn = {
+  padding: "0 18px",
+  background: "#2563eb",
+  color: "#fff",
+  borderRadius: 10,
+  border: "none",
+  cursor: "pointer",
+};
+
+const headerBtn = {
+  marginLeft: 8,
   padding: "6px 10px",
   borderRadius: 8,
   border: "none",
+  cursor: "pointer",
+};
+
+const deleteBtn = {
+  fontSize: 12,
+  marginTop: 4,
+  background: "transparent",
+  border: "none",
+  color: "#1d4ed8",
   cursor: "pointer",
 };
