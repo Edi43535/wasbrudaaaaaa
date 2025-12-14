@@ -158,27 +158,23 @@ export default function Page() {
     alert("Passwort-Reset-Mail gesendet");
   }
 
-  /* ✍️ NACHRICHT SENDEN (EINZIGE WICHTIGE ÄNDERUNG) */
+  /* ✍️ Nachricht senden */
   async function pushMessage() {
     if (!message.trim()) return;
 
-    // ✅ Frontend-Check für hs-rm.de
     if (!user?.email || !user.email.endsWith("@hs-rm.de")) {
       alert("Nur Nutzer mit @hs-rm.de dürfen Nachrichten senden.");
       return;
     }
 
-    try {
-      const db = getDatabase(auth.app);
-      await push(ref(db, "messages"), {
-        text: message,
-        owner: user.uid,
-        timestamp: Date.now(),
-      });
-      setMessage("");
-    } catch {
-      alert("Nachricht konnte nicht gesendet werden (Firebase Rules).");
-    }
+    const db = getDatabase(auth.app);
+    await push(ref(db, "messages"), {
+      text: message,
+      owner: user.uid,
+      timestamp: Date.now(),
+    });
+
+    setMessage("");
   }
 
   async function deleteMessage(id: string) {
@@ -240,6 +236,11 @@ export default function Page() {
           </button>
         </div>
 
+        {/* ✅ Freundlicher Hinweis */}
+        <div style={chatNotice}>
+          💬 Bitte bleibt freundlich und respektvoll 💙
+        </div>
+
         <div style={messagesBox}>
           {[...messages]
             .sort((a, b) => a.timestamp - b.timestamp)
@@ -290,7 +291,17 @@ export default function Page() {
   );
 }
 
-/* 🎨 STYLES (unverändert) */
+/* 🎨 STYLES */
+
+const chatNotice = {
+  textAlign: "center" as const,
+  padding: "8px 12px",
+  fontSize: 14,
+  fontWeight: 500,
+  color: "#7c2d12",
+  background: "rgba(254, 215, 170, 0.6)",
+  borderBottom: "1px solid #fed7aa",
+};
 
 const loginWrapper = {
   minHeight: "100vh",
