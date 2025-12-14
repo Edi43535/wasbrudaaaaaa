@@ -19,8 +19,10 @@ import {
   limitToLast,
   endAt,
   onChildAdded,
+  onChildRemoved,
   off,
   remove,
+  get, // ✅ für Pagination-Fix
 } from "firebase/database";
 
 import { auth } from "./config/firebase";
@@ -48,8 +50,10 @@ export default function Page() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /* 🔐 Auth */
   useEffect(() => onAuthStateChanged(auth, setUser), []);
 
+  /* 💬 Initiale + Realtime-Nachrichten */
   useEffect(() => {
     if (!user) return;
 
@@ -63,17 +67,26 @@ export default function Page() {
     setMessages([]);
     setOldestTimestamp(null);
 
+    // ➕ Neue & bestehende Nachrichten
     onChildAdded(q, (snap) => {
       const msg = { id: snap.key!, ...snap.val() };
-      setMessages((prev) => [...prev, msg]);
+      setMessages((prev) =>
+        prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
+      );
       setOldestTimestamp((prev) =>
         prev === null ? msg.timestamp : Math.min(prev, msg.timestamp)
       );
     });
 
+    // ❌ Gelöschte Nachrichten
+    onChildRemoved(q, (snap) => {
+      setMessages((prev) => prev.filter((m) => m.id !== snap.key));
+    });
+
     return () => off(q);
   }, [user]);
 
+  /* 🔽 Ältere Nachrichten laden (FIX: einmaliges get()) */
   async function loadMore() {
     if (!user || loadingMore || oldestTimestamp === null) return;
 
@@ -87,19 +100,33 @@ export default function Page() {
       limitToLast(PAGE_SIZE)
     );
 
-    onChildAdded(q, (snap) => {
-      const msg = { id: snap.key!, ...snap.val() };
-      setMessages((prev) =>
-        prev.some((m) => m.id === msg.id) ? prev : [msg, ...prev]
-      );
-      setOldestTimestamp((prev) =>
-        prev === null ? msg.timestamp : Math.min(prev, msg.timestamp)
-      );
+    const snap = await get(q); // ✅ kein Listener
+
+    const older: Message[] = [];
+    snap.forEach((child) => {
+      const val = child.val();
+      older.push({
+        id: child.key!,
+        text: val.text,
+        owner: val.owner,
+        timestamp: val.timestamp,
+      });
     });
+
+    older.sort((a, b) => a.timestamp - b.timestamp);
+
+    if (older.length > 0) {
+      setMessages((prev) => {
+        const existing = new Set(prev.map((m) => m.id));
+        return [...older.filter((m) => !existing.has(m.id)), ...prev];
+      });
+      setOldestTimestamp(older[0].timestamp);
+    }
 
     setLoadingMore(false);
   }
 
+  /* 🔁 Infinite Scroll */
   useEffect(() => {
     if (!bottomRef.current) return;
 
@@ -114,6 +141,7 @@ export default function Page() {
     return () => observer.disconnect();
   }, [oldestTimestamp]);
 
+  /* 🔐 Auth Actions */
   async function handleLogin() {
     await signInWithEmailAndPassword(auth, email, password);
   }
@@ -132,6 +160,7 @@ export default function Page() {
     alert("Passwort-Reset-Mail gesendet");
   }
 
+  /* ✍️ Nachrichten */
   async function pushMessage() {
     if (!message.trim()) return;
 
@@ -150,7 +179,7 @@ export default function Page() {
     await remove(ref(db, `messages/${id}`));
   }
 
-  /* LOGIN */
+  /* 🔐 LOGIN */
   if (!user) {
     return (
       <div style={loginWrapper}>
@@ -193,7 +222,7 @@ export default function Page() {
     );
   }
 
-  /* CHAT */
+  /* 💬 CHAT */
   return (
     <div style={appWrapper}>
       <div style={chatContainer}>
@@ -205,34 +234,36 @@ export default function Page() {
         </div>
 
         <div style={messagesBox}>
-          {messages.map((m) => {
-            const isOwn = m.owner === user.uid;
-            return (
-              <div
-                key={m.id}
-                style={{
-                  alignSelf: isOwn ? "flex-end" : "flex-start",
-                  background: isOwn ? "#bfdbfe" : "#e5e7eb",
-                  padding: "10px 14px",
-                  borderRadius: 14,
-                  marginBottom: 8,
-                  maxWidth: "75%",
-                }}
-              >
-                {m.text}
-                {isOwn && (
-                  <div style={{ textAlign: "right" }}>
-                    <button
-                      style={deleteBtn}
-                      onClick={() => deleteMessage(m.id)}
-                    >
-                      Löschen
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {[...messages]
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .map((m) => {
+              const isOwn = m.owner === user.uid;
+              return (
+                <div
+                  key={m.id}
+                  style={{
+                    alignSelf: isOwn ? "flex-end" : "flex-start",
+                    background: isOwn ? "#bfdbfe" : "#e5e7eb",
+                    padding: "10px 14px",
+                    borderRadius: 14,
+                    marginBottom: 8,
+                    maxWidth: "75%",
+                  }}
+                >
+                  {m.text}
+                  {isOwn && (
+                    <div style={{ textAlign: "right" }}>
+                      <button
+                        style={deleteBtn}
+                        onClick={() => deleteMessage(m.id)}
+                      >
+                        Löschen
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           <div ref={bottomRef} />
         </div>
 
@@ -252,7 +283,7 @@ export default function Page() {
   );
 }
 
-/* 🎨 STYLES */
+/* 🎨 STYLES – UNVERÄNDERT */
 
 const loginWrapper = {
   minHeight: "100vh",
@@ -293,7 +324,6 @@ const loginCard = {
   textAlign: "center" as const,
 };
 
-/* 🔴 NUR HIER GEÄNDERT */
 const appWrapper = {
   minHeight: "100vh",
   display: "flex",
