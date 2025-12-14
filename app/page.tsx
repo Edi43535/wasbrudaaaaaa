@@ -36,6 +36,8 @@ const PAGE_SIZE = 50;
 
 export default function Page() {
   const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -48,8 +50,16 @@ export default function Page() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
+  /* 🔐 AUTH – sofortiges Feedback */
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
 
+  /* 🔄 Messages sofort nach Auth */
   useEffect(() => {
     if (!user) return;
 
@@ -65,7 +75,9 @@ export default function Page() {
 
     onChildAdded(q, (snap) => {
       const msg = { id: snap.key!, ...snap.val() };
-      setMessages((prev) => [...prev, msg]);
+      setMessages((prev) =>
+        prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
+      );
       setOldestTimestamp((prev) =>
         prev === null ? msg.timestamp : Math.min(prev, msg.timestamp)
       );
@@ -74,6 +86,7 @@ export default function Page() {
     return () => off(q);
   }, [user]);
 
+  /* 🔄 Infinite Scroll */
   async function loadMore() {
     if (!user || loadingMore || oldestTimestamp === null) return;
 
@@ -106,7 +119,7 @@ export default function Page() {
     const observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(loadMore, 300);
+        debounceRef.current = setTimeout(loadMore, 200);
       }
     });
 
@@ -114,25 +127,23 @@ export default function Page() {
     return () => observer.disconnect();
   }, [oldestTimestamp]);
 
-  async function handleLogin() {
-    await signInWithEmailAndPassword(auth, email, password);
-  }
+  /* 🔐 Auth Actions */
+  const handleLogin = async () =>
+    signInWithEmailAndPassword(auth, email, password);
 
-  async function handleRegister() {
-    await createUserWithEmailAndPassword(auth, email, password);
-  }
+  const handleRegister = async () =>
+    createUserWithEmailAndPassword(auth, email, password);
 
-  async function handleLogout() {
-    await signOut(auth);
-  }
+  const handleLogout = async () => signOut(auth);
 
-  async function handlePasswordReset() {
+  const handlePasswordReset = async () => {
     if (!user?.email) return;
     await sendPasswordResetEmail(auth, user.email);
     alert("Passwort-Reset-Mail gesendet");
-  }
+  };
 
-  async function pushMessage() {
+  /* 💬 Messages */
+  const pushMessage = async () => {
     if (!message.trim()) return;
 
     const db = getDatabase(auth.app);
@@ -143,113 +154,99 @@ export default function Page() {
     });
 
     setMessage("");
-  }
+  };
 
-  async function deleteMessage(id: string) {
+  const deleteMessage = async (id: string) => {
     const db = getDatabase(auth.app);
     await remove(ref(db, `messages/${id}`));
+  };
+
+  /* ⏳ AUTH LOADING SCREEN (wichtig!) */
+  if (authLoading) {
+    return (
+      <div style={loadingScreen}>
+        <div style={spinner} />
+        <p>Verbinde mit Firebase …</p>
+      </div>
+    );
   }
 
-  /* LOGIN */
+  /* 🔐 LOGIN */
   if (!user) {
     return (
       <div style={loginWrapper}>
-        {/* Hochschule ganz oben */}
-        <div style={uniHeader}>
-          Hochschule RheinMain
-        </div>
+        <h1 style={{ color: "#fff" }}>Hochschule RheinMain</h1>
+        <h2 style={{ color: "#fff", marginBottom: 30 }}>
+          Abgabe Maschinelles Lernen<br />von Edvin Jashari
+        </h2>
 
-        <div style={loginContent}>
-          {/* Abgabe-Titel */}
-          <h1 style={submissionTitle}>
-            Abgabe Maschinelles Lernen<br />
-            von Edvin Jashari
-          </h1>
-
-          <div style={loginCard}>
-            <h2>💬 Campus Chat</h2>
-            <p style={{ color: "#666" }}>Login nur mit @hs-rm.de</p>
-
-            <input
-              style={input}
-              placeholder="E-Mail (nur @hs-rm.de)"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-
-            <input
-              style={input}
-              type="password"
-              placeholder="Passwort"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-
-            <button style={primaryBtn} onClick={handleLogin}>
-              Login
-            </button>
-            <button style={secondaryBtn} onClick={handleRegister}>
-              Registrieren
-            </button>
-          </div>
+        <div style={loginCard}>
+          <input
+            style={input}
+            placeholder="E-Mail (nur @hs-rm.de)"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            style={input}
+            type="password"
+            placeholder="Passwort"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button style={primaryBtn} onClick={handleLogin}>Login</button>
+          <button style={secondaryBtn} onClick={handleRegister}>Registrieren</button>
         </div>
       </div>
     );
   }
 
-  /* CHAT */
+  /* 💬 CHAT */
   return (
     <div style={appWrapper}>
       <div style={chatContainer}>
         <div style={chatHeader}>
-          <button style={headerBtn} onClick={handleLogout}>Logout</button>
-          <button style={headerBtn} onClick={handlePasswordReset}>
-            Passwort zurücksetzen
-          </button>
+          <button onClick={handleLogout}>Logout</button>
+          <button onClick={handlePasswordReset}>Passwort zurücksetzen</button>
         </div>
 
         <div style={messagesBox}>
-          {messages.map((m) => {
-            const isOwn = m.owner === user.uid;
-            return (
-              <div
-                key={m.id}
-                style={{
-                  alignSelf: isOwn ? "flex-end" : "flex-start",
-                  background: isOwn ? "#bfdbfe" : "#e5e7eb",
-                  padding: "10px 14px",
-                  borderRadius: 14,
-                  marginBottom: 8,
-                  maxWidth: "75%",
-                }}
-              >
-                {m.text}
-                {isOwn && (
-                  <div style={{ textAlign: "right" }}>
-                    <button
-                      style={deleteBtn}
-                      onClick={() => deleteMessage(m.id)}
-                    >
+          {[...messages]
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .map((m) => {
+              const isOwn = m.owner === user.uid;
+              return (
+                <div
+                  key={m.id}
+                  style={{
+                    alignSelf: isOwn ? "flex-end" : "flex-start",
+                    background: isOwn ? "#bfdbfe" : "#e5e7eb",
+                    padding: "10px 14px",
+                    borderRadius: 14,
+                    marginBottom: 8,
+                    maxWidth: "75%",
+                  }}
+                >
+                  {m.text}
+                  {isOwn && (
+                    <button style={deleteBtn} onClick={() => deleteMessage(m.id)}>
                       Löschen
                     </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  )}
+                </div>
+              );
+            })}
           <div ref={bottomRef} />
         </div>
 
         <div style={inputBar}>
           <textarea
             style={chatInput}
-            placeholder="Nachricht schreiben…"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
+            placeholder="Nachricht schreiben…"
           />
-          <button style={sendBtn} onClick={pushMessage}>
-            Senden
-          </button>
+          <button style={sendBtn} onClick={pushMessage}>Senden</button>
         </div>
       </div>
     </div>
@@ -257,6 +254,22 @@ export default function Page() {
 }
 
 /* 🎨 STYLES */
+const loadingScreen = {
+  height: "100vh",
+  display: "flex",
+  flexDirection: "column" as const,
+  justifyContent: "center",
+  alignItems: "center",
+};
+
+const spinner = {
+  width: 40,
+  height: 40,
+  border: "4px solid #ddd",
+  borderTop: "4px solid #2563eb",
+  borderRadius: "50%",
+  animation: "spin 1s linear infinite",
+};
 
 const loginWrapper = {
   minHeight: "100vh",
@@ -264,37 +277,14 @@ const loginWrapper = {
   display: "flex",
   flexDirection: "column" as const,
   alignItems: "center",
-};
-
-const uniHeader = {
-  marginTop: 30,
-  fontSize: 22,
-  fontWeight: 600,
-  color: "#fff",
-};
-
-const loginContent = {
-  marginTop: 40,
-  display: "flex",
-  flexDirection: "column" as const,
-  alignItems: "center",
-};
-
-const submissionTitle = {
-  color: "#fff",
-  textAlign: "center" as const,
-  marginBottom: 30,
-  fontSize: 28,
-  fontWeight: 700,
+  justifyContent: "center",
 };
 
 const loginCard = {
-  width: 380,
-  padding: 30,
   background: "#fff",
+  padding: 30,
   borderRadius: 16,
-  boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
-  textAlign: "center" as const,
+  width: 380,
 };
 
 const appWrapper = {
@@ -311,89 +301,16 @@ const chatContainer = {
   height: "85vh",
   background: "#fff",
   borderRadius: 18,
-  boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
   display: "flex",
   flexDirection: "column" as const,
 };
 
-const chatHeader = {
-  padding: 12,
-  borderBottom: "1px solid #e5e7eb",
-  textAlign: "right" as const,
-};
-
-const messagesBox = {
-  flex: 1,
-  padding: 14,
-  overflowY: "auto" as const,
-  display: "flex",
-  flexDirection: "column" as const,
-  background: "#f8fafc",
-};
-
-const inputBar = {
-  display: "flex",
-  gap: 10,
-  padding: 12,
-  borderTop: "1px solid #e5e7eb",
-};
-
-const input = {
-  width: "100%",
-  padding: 12,
-  marginBottom: 12,
-  borderRadius: 10,
-  border: "1px solid #ccc",
-};
-
-const chatInput = {
-  flex: 1,
-  minHeight: 60,
-  resize: "none" as const,
-  borderRadius: 10,
-  padding: 10,
-  border: "1px solid #ccc",
-};
-
-const primaryBtn = {
-  width: "100%",
-  padding: 12,
-  background: "#2563eb",
-  color: "#fff",
-  border: "none",
-  borderRadius: 10,
-  cursor: "pointer",
-  marginBottom: 10,
-};
-
-const secondaryBtn = {
-  ...primaryBtn,
-  background: "#e5e7eb",
-  color: "#000",
-};
-
-const sendBtn = {
-  padding: "0 18px",
-  background: "#2563eb",
-  color: "#fff",
-  borderRadius: 10,
-  border: "none",
-  cursor: "pointer",
-};
-
-const headerBtn = {
-  marginLeft: 8,
-  padding: "6px 10px",
-  borderRadius: 8,
-  border: "none",
-  cursor: "pointer",
-};
-
-const deleteBtn = {
-  fontSize: 12,
-  marginTop: 4,
-  background: "transparent",
-  border: "none",
-  color: "#1d4ed8",
-  cursor: "pointer",
-};
+const chatHeader = { padding: 12, textAlign: "right" as const };
+const messagesBox = { flex: 1, padding: 14, overflowY: "auto" as const, display: "flex", flexDirection: "column" as const };
+const inputBar = { display: "flex", gap: 10, padding: 12 };
+const input = { width: "100%", padding: 12, marginBottom: 12 };
+const chatInput = { flex: 1, minHeight: 60 };
+const primaryBtn = { width: "100%", padding: 12, background: "#2563eb", color: "#fff" };
+const secondaryBtn = { ...primaryBtn, background: "#e5e7eb", color: "#000" };
+const sendBtn = { padding: "0 18px", background: "#2563eb", color: "#fff" };
+const deleteBtn = { fontSize: 12, background: "transparent", border: "none" };
