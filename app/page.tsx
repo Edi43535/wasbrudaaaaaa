@@ -22,7 +22,7 @@ import {
   onChildRemoved,
   off,
   remove,
-  get, // ✅ für Pagination-Fix
+  get,
 } from "firebase/database";
 
 import { auth } from "./config/firebase";
@@ -67,7 +67,6 @@ export default function Page() {
     setMessages([]);
     setOldestTimestamp(null);
 
-    // ➕ Neue & bestehende Nachrichten
     onChildAdded(q, (snap) => {
       const msg = { id: snap.key!, ...snap.val() };
       setMessages((prev) =>
@@ -78,7 +77,6 @@ export default function Page() {
       );
     });
 
-    // ❌ Gelöschte Nachrichten
     onChildRemoved(q, (snap) => {
       setMessages((prev) => prev.filter((m) => m.id !== snap.key));
     });
@@ -86,7 +84,7 @@ export default function Page() {
     return () => off(q);
   }, [user]);
 
-  /* 🔽 Ältere Nachrichten laden (FIX: einmaliges get()) */
+  /* 🔽 Pagination */
   async function loadMore() {
     if (!user || loadingMore || oldestTimestamp === null) return;
 
@@ -100,7 +98,7 @@ export default function Page() {
       limitToLast(PAGE_SIZE)
     );
 
-    const snap = await get(q); // ✅ kein Listener
+    const snap = await get(q);
 
     const older: Message[] = [];
     snap.forEach((child) => {
@@ -141,7 +139,7 @@ export default function Page() {
     return () => observer.disconnect();
   }, [oldestTimestamp]);
 
-  /* 🔐 Auth Actions */
+  /* 🔐 Auth */
   async function handleLogin() {
     await signInWithEmailAndPassword(auth, email, password);
   }
@@ -160,18 +158,27 @@ export default function Page() {
     alert("Passwort-Reset-Mail gesendet");
   }
 
-  /* ✍️ Nachrichten */
+  /* ✍️ NACHRICHT SENDEN (EINZIGE WICHTIGE ÄNDERUNG) */
   async function pushMessage() {
     if (!message.trim()) return;
 
-    const db = getDatabase(auth.app);
-    await push(ref(db, "messages"), {
-      text: message,
-      owner: user!.uid,
-      timestamp: Date.now(),
-    });
+    // ✅ Frontend-Check für hs-rm.de
+    if (!user?.email || !user.email.endsWith("@hs-rm.de")) {
+      alert("Nur Nutzer mit @hs-rm.de dürfen Nachrichten senden.");
+      return;
+    }
 
-    setMessage("");
+    try {
+      const db = getDatabase(auth.app);
+      await push(ref(db, "messages"), {
+        text: message,
+        owner: user.uid,
+        timestamp: Date.now(),
+      });
+      setMessage("");
+    } catch {
+      alert("Nachricht konnte nicht gesendet werden (Firebase Rules).");
+    }
   }
 
   async function deleteMessage(id: string) {
@@ -283,7 +290,7 @@ export default function Page() {
   );
 }
 
-/* 🎨 STYLES – UNVERÄNDERT */
+/* 🎨 STYLES (unverändert) */
 
 const loginWrapper = {
   minHeight: "100vh",
