@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 
 import {
+  getDatabase,
   ref,
   push,
   onChildAdded,
@@ -18,8 +19,9 @@ import {
   off,
 } from "firebase/database";
 
-import { auth, db } from "./config/firebase";
+import { auth } from "./config/firebase";
 
+/* Nachrichtentyp */
 type Message = {
   id: string;
   text: string;
@@ -32,11 +34,11 @@ export default function Page() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // 🔹 Realtime-States
+  // 🔹 Realtime States
   const [messages, setMessages] = useState<Message[]>([]);
   const [message, setMessage] = useState("");
 
-  // 🔄 Auth-Status prüfen
+  // 🔄 Login-Status prüfen
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
@@ -48,6 +50,8 @@ export default function Page() {
   useEffect(() => {
     if (!user) return;
 
+    // 👉 Database DIREKT hier initialisiert (ohne firebase.ts)
+    const db = getDatabase(auth.app);
     const messagesRef = ref(db, "messages");
 
     onChildAdded(messagesRef, (snapshot) => {
@@ -92,6 +96,8 @@ export default function Page() {
   // ⬆️ Nachricht hochladen
   async function pushMessage() {
     if (!message.trim()) return;
+
+    const db = getDatabase(auth.app);
 
     await push(ref(db, "messages"), {
       text: message,
@@ -177,3 +183,4 @@ export default function Page() {
     </div>
   );
 }
+
