@@ -19,6 +19,7 @@ import {
   limitToLast,
   endAt,
   onChildAdded,
+  onChildRemoved, // ✅ NEU
   off,
   remove,
 } from "firebase/database";
@@ -63,12 +64,18 @@ export default function Page() {
     setMessages([]);
     setOldestTimestamp(null);
 
+    // ➕ Neue Nachrichten
     onChildAdded(q, (snap) => {
       const msg = { id: snap.key!, ...snap.val() };
       setMessages((prev) => [...prev, msg]);
       setOldestTimestamp((prev) =>
         prev === null ? msg.timestamp : Math.min(prev, msg.timestamp)
       );
+    });
+
+    // ❌ GELÖSCHTE Nachrichten (DER FIX)
+    onChildRemoved(q, (snap) => {
+      setMessages((prev) => prev.filter((m) => m.id !== snap.key));
     });
 
     return () => off(q);
@@ -252,7 +259,7 @@ export default function Page() {
   );
 }
 
-/* 🎨 STYLES */
+/* 🎨 STYLES (UNVERÄNDERT) */
 
 const loginWrapper = {
   minHeight: "100vh",
@@ -293,7 +300,6 @@ const loginCard = {
   textAlign: "center" as const,
 };
 
-/* 🔴 NUR HIER GEÄNDERT */
 const appWrapper = {
   minHeight: "100vh",
   display: "flex",
