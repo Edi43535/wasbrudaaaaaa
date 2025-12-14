@@ -47,21 +47,21 @@ export default function Page() {
   const [oldestTimestamp, setOldestTimestamp] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  /* 🕒 LIVE-UHR */
   const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /* 🕒 Live Uhr */
+  useEffect(() => {
+    const i = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(i);
+  }, []);
+
   /* 🔐 Auth */
   useEffect(() => onAuthStateChanged(auth, setUser), []);
 
-  /* 💬 Initiale + Realtime-Nachrichten */
+  /* 💬 Messages */
   useEffect(() => {
     if (!user) return;
 
@@ -92,7 +92,6 @@ export default function Page() {
     return () => off(q);
   }, [user]);
 
-  /* 🔽 Pagination */
   async function loadMore() {
     if (!user || loadingMore || oldestTimestamp === null) return;
 
@@ -107,8 +106,8 @@ export default function Page() {
     );
 
     const snap = await get(q);
-
     const older: Message[] = [];
+
     snap.forEach((child) => {
       const val = child.val();
       older.push({
@@ -132,7 +131,6 @@ export default function Page() {
     setLoadingMore(false);
   }
 
-  /* 🔁 Infinite Scroll */
   useEffect(() => {
     if (!bottomRef.current) return;
 
@@ -147,7 +145,6 @@ export default function Page() {
     return () => observer.disconnect();
   }, [oldestTimestamp]);
 
-  /* 🔐 Auth */
   async function handleLogin() {
     await signInWithEmailAndPassword(auth, email, password);
   }
@@ -166,11 +163,10 @@ export default function Page() {
     alert("Passwort-Reset-Mail gesendet");
   }
 
-  /* ✍️ Nachricht senden */
   async function pushMessage() {
     if (!message.trim()) return;
 
-    if (!user?.email || !user.email.endsWith("@hs-rm.de")) {
+    if (!user?.email?.endsWith("@hs-rm.de")) {
       alert("Nur Nutzer mit @hs-rm.de dürfen Nachrichten senden.");
       return;
     }
@@ -190,7 +186,6 @@ export default function Page() {
     await remove(ref(db, `messages/${id}`));
   }
 
-  /* 🔐 LOGIN */
   if (!user) {
     return (
       <div style={loginWrapper}>
@@ -233,11 +228,10 @@ export default function Page() {
     );
   }
 
-  /* 💬 CHAT */
   return (
     <div style={appWrapper}>
       <div style={chatContainer}>
-        {/* 🕒 LIVE-UHR */}
+        {/* 🕒 Uhr */}
         <div style={clockBar}>
           {now.toLocaleDateString("de-DE", {
             weekday: "long",
@@ -248,15 +242,16 @@ export default function Page() {
           – {now.toLocaleTimeString("de-DE")}
         </div>
 
+        {/* 💙 Hinweis */}
+        <div style={chatNotice}>
+          💬 Bitte bleibt freundlich und respektvoll 💙
+        </div>
+
         <div style={chatHeader}>
           <button style={headerBtn} onClick={handleLogout}>Logout</button>
           <button style={headerBtn} onClick={handlePasswordReset}>
             Passwort zurücksetzen
           </button>
-        </div>
-
-        <div style={chatNotice}>
-          💬 Bitte bleibt freundlich und respektvoll 💙
         </div>
 
         <div style={messagesBox}>
@@ -268,12 +263,9 @@ export default function Page() {
                 <div
                   key={m.id}
                   style={{
+                    ...bubble,
                     alignSelf: isOwn ? "flex-end" : "flex-start",
                     background: isOwn ? "#bfdbfe" : "#e5e7eb",
-                    padding: "10px 14px",
-                    borderRadius: 14,
-                    marginBottom: 8,
-                    maxWidth: "75%",
                   }}
                 >
                   {m.text}
@@ -309,28 +301,34 @@ export default function Page() {
   );
 }
 
-/* 🎨 STYLES – NUR ERGÄNZT */
+/* 🎨 STYLES (nur Optik) */
 
 const clockBar = {
   textAlign: "center" as const,
-  padding: "10px 12px",
+  padding: "10px",
   fontSize: 14,
   fontWeight: 600,
-  background: "rgba(0,0,0,0.04)",
+  background: "rgba(255,255,255,0.85)",
   borderBottom: "1px solid #e5e7eb",
 };
 
 const chatNotice = {
   textAlign: "center" as const,
-  padding: "8px 12px",
+  padding: "8px",
   fontSize: 14,
-  fontWeight: 500,
+  background: "#fff7ed",
   color: "#7c2d12",
-  background: "rgba(254, 215, 170, 0.6)",
   borderBottom: "1px solid #fed7aa",
 };
 
-/* ⬇️ ALLES DARUNTER UNVERÄNDERT */
+const bubble = {
+  padding: "12px 16px",
+  borderRadius: 16,
+  marginBottom: 8,
+  maxWidth: "75%",
+  transition: "transform .15s ease, box-shadow .15s ease",
+  boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+};
 
 const loginWrapper = {
   minHeight: "100vh",
@@ -366,8 +364,8 @@ const loginCard = {
   width: 380,
   padding: 30,
   background: "#fff",
-  borderRadius: 16,
-  boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+  borderRadius: 18,
+  boxShadow: "0 30px 60px rgba(0,0,0,0.25)",
   textAlign: "center" as const,
 };
 
@@ -381,18 +379,18 @@ const appWrapper = {
 
 const chatContainer = {
   width: "100%",
-  maxWidth: 700,
-  height: "85vh",
-  background: "#fff",
-  borderRadius: 18,
-  boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+  maxWidth: 720,
+  height: "90vh",
+  background: "rgba(255,255,255,0.95)",
+  borderRadius: 22,
+  boxShadow: "0 30px 80px rgba(0,0,0,0.35)",
   display: "flex",
   flexDirection: "column" as const,
+  backdropFilter: "blur(8px)",
 };
 
 const chatHeader = {
   padding: 12,
-  borderBottom: "1px solid #e5e7eb",
   textAlign: "right" as const,
 };
 
@@ -409,7 +407,6 @@ const inputBar = {
   display: "flex",
   gap: 10,
   padding: 12,
-  borderTop: "1px solid #e5e7eb",
 };
 
 const input = {
@@ -422,10 +419,10 @@ const input = {
 
 const chatInput = {
   flex: 1,
-  minHeight: 60,
+  minHeight: 70,
   resize: "none" as const,
-  borderRadius: 10,
-  padding: 10,
+  borderRadius: 14,
+  padding: 12,
   border: "1px solid #ccc",
 };
 
@@ -435,7 +432,7 @@ const primaryBtn = {
   background: "#2563eb",
   color: "#fff",
   border: "none",
-  borderRadius: 10,
+  borderRadius: 12,
   cursor: "pointer",
   marginBottom: 10,
 };
@@ -447,25 +444,27 @@ const secondaryBtn = {
 };
 
 const sendBtn = {
-  padding: "0 18px",
+  padding: "0 22px",
   background: "#2563eb",
   color: "#fff",
-  borderRadius: 10,
+  borderRadius: 14,
   border: "none",
   cursor: "pointer",
+  fontWeight: 700,
 };
 
 const headerBtn = {
   marginLeft: 8,
-  padding: "6px 10px",
-  borderRadius: 8,
-  border: "none",
+  padding: "8px 12px",
+  borderRadius: 10,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
   cursor: "pointer",
 };
 
 const deleteBtn = {
   fontSize: 12,
-  marginTop: 4,
+  marginTop: 6,
   background: "transparent",
   border: "none",
   color: "#1d4ed8",
