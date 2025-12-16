@@ -164,7 +164,8 @@ export default function Page() {
     alert("Bitte E-Mail eingeben");
     return;
   }
-  await sendPasswordResetEmail(auth, email);
+await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+
   alert("Passwort-Reset-Mail gesendet");
 }
 
