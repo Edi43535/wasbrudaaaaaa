@@ -19,7 +19,6 @@ import {
   limitToLast,
   endAt,
   onValue,
-  off,
   remove,
   get,
 } from "firebase/database";
@@ -45,8 +44,7 @@ export default function Page() {
 
   const [oldestTimestamp, setOldestTimestamp] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-
-  /* 🕒 LIVE-UHR */
+  /* 🕒 LIVE UHR */
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -57,9 +55,11 @@ export default function Page() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* 🔐 AUTH */
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
+  useEffect(() => {
+    return onAuthStateChanged(auth, setUser);
+  }, []);
 
-  /* 💬 REALTIME MESSAGES (NEU – OHNE onChildAdded) */
+  /* 💬 REALTIME MESSAGES (onValue, korrekt) */
   useEffect(() => {
     if (!user) return;
 
@@ -91,7 +91,7 @@ export default function Page() {
       }
     });
 
-    return () => off(q);
+    return () => unsubscribe();
   }, [user]);
   /* 🔽 PAGINATION */
   async function loadMore() {
@@ -166,7 +166,6 @@ export default function Page() {
     await sendPasswordResetEmail(auth, email.trim().toLowerCase());
     alert("Passwort-Reset-Mail gesendet");
   }
-
   /* ✍️ MESSAGE SEND */
   async function pushMessage() {
     if (!message.trim()) return;
@@ -193,16 +192,17 @@ export default function Page() {
   /* 🔐 LOGIN */
   if (!user) {
     return (
-      <div style={loginWrapper}>
-        {/* dein kompletter Login JSX – UNVERÄNDERT */}
+      <div>
+        {/* 🔴 HIER: dein kompletter Login JSX (unverändert) */}
       </div>
     );
   }
 
   /* 💬 CHAT */
   return (
-    <div style={appWrapper}>
-      {/* kompletter Chat JSX – UNVERÄNDERT */}
+    <div>
+      {/* 🔴 HIER: dein kompletter Chat JSX + Styles (unverändert) */}
+      <div ref={bottomRef} />
     </div>
   );
 }
