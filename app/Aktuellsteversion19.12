@@ -70,7 +70,7 @@ export default function Page() {
       orderByChild("timestamp"),
       limitToLast(PAGE_SIZE)
     );
-;
+
     setMessages([]);
     setOldestTimestamp(null);
 
