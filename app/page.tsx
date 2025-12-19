@@ -75,10 +75,18 @@ export default function Page() {
     setOldestTimestamp(null);
 
     onChildAdded(q, (snap) => {
-      const msg = { id: snap.key!, ...snap.val() };
+      const val = snap.val();
+      const msg: Message = {
+        id: snap.key!,
+        text: val.text,
+        owner: val.owner,
+        timestamp: val.timestamp,
+      };
+
       setMessages((prev) =>
         prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
       );
+
       setOldestTimestamp((prev) =>
         prev === null ? msg.timestamp : Math.min(prev, msg.timestamp)
       );
@@ -93,25 +101,249 @@ export default function Page() {
 
   /* 🔽 Pagination */
   async function loadMore() {
+    if (!user || loadingMore || oldestTimestamp === null) return;
+
+    setLoadingMore(true);
+
+    const db = getDatabase(auth.app);
+    const q = query(
+      ref(db, "messages"),
+      orderByChild("timestamp"),
+      endAt(oldestTimestamp - 1),
+      limitToLast(PAGE_SIZE)
+    );
+
+    const snap = await get(q);
+
     const older: Message[] = [];
-snap.forEach((child) => {
-  const val = child.val();
-  older.push({
-    id: child.key!,
-    text: val.text,
-    owner: val.owner,
-    timestamp: val.timestamp,
-  });
-});
+    snap.forEach((child) => {
+      const val = child.val();
+      older.push({
+        id: child.key!,
+        text: val.text,
+        owner: val.owner,
+        timestamp: val.timestamp,
+      });
+    });
 
-if (older.length > 0) {
-  setMessages((prev) => {
-    const existing = new Set(prev.map((m) => m.id));
-    return [...older.filter((m) => !existing.has(m.id)), ...prev];
-  });
-  setOldestTimestamp(older[0].timestamp);
-}
+    // ❗️KEIN .sort(): Firebase liefert durch orderByChild bereits in Reihenfolge,
+    // und snap.forEach iteriert in dieser Reihenfolge.
 
+    if (older.length > 0) {
+      setMessages((prev) => {
+        const existing = new Set(prev.map((m) => m.id));
+        return [...older.filter((m) => !existing.has(m.id)), ...prev];
+      });
+      setOldestTimestamp(older[0].timestamp);
+    }
+
+    setLoadingMore(false);
+  }
+
+  /* 🔁 Infinite Scroll */
+  useEffect(() => {
+    if (!bottomRef.current) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(loadMore, 300);
+      }
+    });
+
+    observer.observe(bottomRef.current);
+    return () => observer.disconnect();
+  }, [oldestTimestamp]); // bewusst wie bei dir
+
+  /* 🔐 Auth Actions */
+  async function handleLogin() {
+    await signInWithEmailAndPassword(auth, email, password);
+  }
+
+  async function handleRegister() {
+    await createUserWithEmailAndPassword(auth, email, password);
+  }
+
+  async function handleLogout() {
+    await signOut(auth);
+  }
+
+  async function handlePasswordReset() {
+    if (!email) {
+      alert("Bitte E-Mail eingeben");
+      return;
+    }
+    await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+    alert("Passwort-Reset-Mail gesendet");
+  }
+
+  /* ✍️ Nachricht senden */
+  async function pushMessage() {
+    if (!message.trim()) return;
+
+    if (!user?.email || !user.email.endsWith("@hs-rm.de")) {
+      alert("Nur Nutzer mit @hs-rm.de dürfen Nachrichten senden.");
+      return;
+    }
+
+    const db = getDatabase(auth.app);
+    await push(ref(db, "messages"), {
+      text: message,
+      owner: user.uid,
+      timestamp: Date.now(),
+    });
+
+    setMessage("");
+  }
+
+  async function deleteMessage(id: string) {
+    const db = getDatabase(auth.app);
+    await remove(ref(db, `messages/${id}`));
+  }
+
+  /* 🔐 LOGIN */
+  if (!user) {
+    return (
+      <div style={loginWrapper} className="loginWrap">
+        <BackgroundFX />
+
+        <div style={uniHeader} className="fadeTop">
+          Hochschule RheinMain
+        </div>
+
+        <div style={loginContent}>
+          <h1 style={submissionTitle} className="titlePop">
+            Abgabe Maschinelles Lernen
+            <br />
+            von Edvin Jashari
+          </h1>
+
+          <div style={loginCard} className="card3d cardEnter">
+            <div className="cardGlow" />
+            <div className="cardInner">
+              <div className="pill">💬 Campus Chat</div>
+              <p className="subText">Login nur mit @hs-rm.de</p>
+
+              <div className="field">
+                <span className="label">E-Mail</span>
+                <input
+                  style={input}
+                  className="inputPro"
+                  placeholder="E-Mail (nur @hs-rm.de)"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+
+              <div className="field">
+                <span className="label">Passwort</span>
+                <input
+                  style={input}
+                  className="inputPro"
+                  type="password"
+                  placeholder="Passwort"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+
+              <button
+                style={primaryBtn}
+                className="btnPro primary"
+                onClick={handleLogin}
+              >
+                Login
+              </button>
+              <button
+                style={secondaryBtn}
+                className="btnPro secondary"
+                onClick={handleRegister}
+              >
+                Registrieren
+              </button>
+              <button
+                style={secondaryBtn}
+                className="btnPro secondary"
+                onClick={handlePasswordReset}
+              >
+                Passwort zurücksetzen
+              </button>
+
+              <div className="tinyNote">
+                Sicherheit wird über <b>Realtime Database Rules</b> geregelt.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <GlobalStyles />
+      </div>
+    );
+  }
+
+  /* 💬 CHAT */
+  return (
+    <div style={appWrapper} className="chatWrap">
+      <div style={chatContainer} className="chatCard">
+        {/* 🕒 LIVE-UHR */}
+        <div style={clockBar} className="clockBar">
+          {now.toLocaleDateString("de-DE", {
+            weekday: "long",
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })}{" "}
+          – {now.toLocaleTimeString("de-DE")}
+        </div>
+
+        {/* ✅ Hinweis */}
+        <div style={chatNotice} className="noticeBar">
+          💬 Bitte bleibt freundlich und respektvoll 💙
+        </div>
+
+        <div style={chatHeader} className="chatHeader">
+          <button style={headerBtn} className="hdrBtn" onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
+
+        <div style={messagesBox} className="msgArea">
+          {/* ❗️KEIN .sort() */}
+          {messages.map((m) => {
+            const isOwn = m.owner === user.uid;
+            return (
+              <div
+                key={m.id}
+                className={`bubble ${isOwn ? "own" : "other"}`}
+                style={{
+                  alignSelf: isOwn ? "flex-end" : "flex-start",
+                  background: isOwn ? "#bfdbfe" : "#e5e7eb",
+                  padding: "10px 14px",
+                  borderRadius: 14,
+                  marginBottom: 8,
+                  maxWidth: "75%",
+                }}
+              >
+                {m.text}
+                {isOwn && (
+                  <div style={{ textAlign: "right" }}>
+                    <button
+                      style={deleteBtn}
+                      className="delBtn"
+                      onClick={() => deleteMessage(m.id)}
+                    >
+                      Löschen
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <div ref={bottomRef} className="sentinel">
+            {loadingMore ? "Lade ältere Nachrichten…" : ""}
+          </div>
+        </div>
 
         <div style={inputBar} className="composer">
           <textarea
@@ -337,8 +569,14 @@ const deleteBtn = {
 function GlobalStyles() {
   return (
     <style jsx global>{`
-      * { box-sizing: border-box; }
-      body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+          Arial;
+      }
 
       /* ---------- LOGIN PREMIUM FX ---------- */
       .bg3d {
@@ -357,19 +595,76 @@ function GlobalStyles() {
         filter: blur(22px);
         opacity: 0.45;
         animation: drift 14s ease-in-out infinite;
-        transform: translate3d(0,0,0);
+        transform: translate3d(0, 0, 0);
       }
 
-      .b1 { left: -120px; top: -80px; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9), rgba(255,255,255,0.0) 55%), radial-gradient(circle at 70% 70%, rgba(96,165,250,0.75), rgba(37,99,235,0.15)); }
-      .b2 { right: -140px; top: 60px; width: 580px; height: 580px; background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.85), rgba(255,255,255,0.0) 55%), radial-gradient(circle at 70% 60%, rgba(59,130,246,0.55), rgba(29,78,216,0.12)); animation-delay: -5s; }
-      .b3 { left: 18%; bottom: -240px; width: 680px; height: 680px; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.55), rgba(255,255,255,0.0) 60%), radial-gradient(circle at 70% 65%, rgba(147,197,253,0.55), rgba(37,99,235,0.08)); animation-delay: -9s; }
+      .b1 {
+        left: -120px;
+        top: -80px;
+        background: radial-gradient(
+            circle at 30% 30%,
+            rgba(255, 255, 255, 0.9),
+            rgba(255, 255, 255, 0) 55%
+          ),
+          radial-gradient(
+            circle at 70% 70%,
+            rgba(96, 165, 250, 0.75),
+            rgba(37, 99, 235, 0.15)
+          );
+      }
+      .b2 {
+        right: -140px;
+        top: 60px;
+        width: 580px;
+        height: 580px;
+        background: radial-gradient(
+            circle at 35% 35%,
+            rgba(255, 255, 255, 0.85),
+            rgba(255, 255, 255, 0) 55%
+          ),
+          radial-gradient(
+            circle at 70% 60%,
+            rgba(59, 130, 246, 0.55),
+            rgba(29, 78, 216, 0.12)
+          );
+        animation-delay: -5s;
+      }
+      .b3 {
+        left: 18%;
+        bottom: -240px;
+        width: 680px;
+        height: 680px;
+        background: radial-gradient(
+            circle at 30% 30%,
+            rgba(255, 255, 255, 0.55),
+            rgba(255, 255, 255, 0) 60%
+          ),
+          radial-gradient(
+            circle at 70% 65%,
+            rgba(147, 197, 253, 0.55),
+            rgba(37, 99, 235, 0.08)
+          );
+        animation-delay: -9s;
+      }
 
       .spot {
         position: absolute;
         inset: 0;
-        background: radial-gradient(800px 420px at 18% 18%, rgba(255,255,255,0.18), transparent 60%),
-                    radial-gradient(680px 360px at 82% 28%, rgba(255,255,255,0.14), transparent 62%),
-                    radial-gradient(900px 520px at 55% 92%, rgba(255,255,255,0.10), transparent 66%);
+        background: radial-gradient(
+            800px 420px at 18% 18%,
+            rgba(255, 255, 255, 0.18),
+            transparent 60%
+          ),
+          radial-gradient(
+            680px 360px at 82% 28%,
+            rgba(255, 255, 255, 0.14),
+            transparent 62%
+          ),
+          radial-gradient(
+            900px 520px at 55% 92%,
+            rgba(255, 255, 255, 0.1),
+            transparent 66%
+          );
         opacity: 0.9;
         animation: breathe 10s ease-in-out infinite;
       }
@@ -380,12 +675,24 @@ function GlobalStyles() {
         top: 58%;
         width: 1400px;
         height: 900px;
-        transform: translate(-50%, -50%) perspective(900px) rotateX(70deg) rotateZ(10deg);
-        background-image:
-          linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px);
+        transform: translate(-50%, -50%) perspective(900px) rotateX(70deg)
+          rotateZ(10deg);
+        background-image: linear-gradient(
+            to right,
+            rgba(255, 255, 255, 0.08) 1px,
+            transparent 1px
+          ),
+          linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.08) 1px,
+            transparent 1px
+          );
         background-size: 60px 60px;
-        mask-image: radial-gradient(circle at 50% 40%, rgba(0,0,0,0.95), transparent 70%);
+        mask-image: radial-gradient(
+          circle at 50% 40%,
+          rgba(0, 0, 0, 0.95),
+          transparent 70%
+        );
         opacity: 0.55;
         animation: gridMove 12s linear infinite;
       }
@@ -399,70 +706,139 @@ function GlobalStyles() {
       }
 
       @keyframes drift {
-        0%, 100% { transform: translate3d(0px, 0px, 0) scale(1); }
-        50% { transform: translate3d(40px, -18px, 0) scale(1.05); }
+        0%,
+        100% {
+          transform: translate3d(0px, 0px, 0) scale(1);
+        }
+        50% {
+          transform: translate3d(40px, -18px, 0) scale(1.05);
+        }
       }
       @keyframes breathe {
-        0%, 100% { opacity: 0.85; }
-        50% { opacity: 1; }
+        0%,
+        100% {
+          opacity: 0.85;
+        }
+        50% {
+          opacity: 1;
+        }
       }
       @keyframes gridMove {
-        0% { background-position: 0 0, 0 0; }
-        100% { background-position: 0 180px, 0 180px; }
+        0% {
+          background-position: 0 0, 0 0;
+        }
+        100% {
+          background-position: 0 180px, 0 180px;
+        }
       }
 
-      .fadeTop { animation: fadeDown 700ms ease both; }
-      .titlePop { animation: popIn 650ms cubic-bezier(.2,.9,.2,1) both; }
-      .cardEnter { animation: cardIn 800ms cubic-bezier(.2,.9,.2,1) both; }
+      .fadeTop {
+        animation: fadeDown 700ms ease both;
+      }
+      .titlePop {
+        animation: popIn 650ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+      }
+      .cardEnter {
+        animation: cardIn 800ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+      }
 
       @keyframes fadeDown {
-        from { opacity: 0; transform: translateY(-8px); }
-        to { opacity: 1; transform: translateY(0); }
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
       @keyframes popIn {
-        from { opacity: 0; transform: translateY(10px) scale(.98); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
+        from {
+          opacity: 0;
+          transform: translateY(10px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
       }
       @keyframes cardIn {
-        from { opacity: 0; transform: translateY(16px) scale(.98); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
+        from {
+          opacity: 0;
+          transform: translateY(16px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
       }
 
-      .card3d { position: relative; }
+      .card3d {
+        position: relative;
+      }
       .cardGlow {
         position: absolute;
         inset: -2px;
-        background: radial-gradient(600px 240px at 50% 0%, rgba(59,130,246,0.35), transparent 60%),
-                    radial-gradient(420px 240px at 10% 30%, rgba(255,255,255,0.25), transparent 60%),
-                    radial-gradient(500px 260px at 90% 35%, rgba(147,197,253,0.25), transparent 62%);
+        background: radial-gradient(
+            600px 240px at 50% 0%,
+            rgba(59, 130, 246, 0.35),
+            transparent 60%
+          ),
+          radial-gradient(
+            420px 240px at 10% 30%,
+            rgba(255, 255, 255, 0.25),
+            transparent 60%
+          ),
+          radial-gradient(
+            500px 260px at 90% 35%,
+            rgba(147, 197, 253, 0.25),
+            transparent 62%
+          );
         filter: blur(12px);
         opacity: 0.85;
       }
-      .cardInner { position: relative; padding: 26px; }
+      .cardInner {
+        position: relative;
+        padding: 26px;
+      }
 
       .pill {
         display: inline-flex;
         padding: 8px 12px;
         border-radius: 999px;
         font-weight: 800;
-        background: rgba(29,78,216,0.10);
-        border: 1px solid rgba(29,78,216,0.22);
+        background: rgba(29, 78, 216, 0.1);
+        border: 1px solid rgba(29, 78, 216, 0.22);
       }
-      .subText { margin: 10px 0 18px; color: rgba(15,23,42,0.65); font-weight: 600; }
+      .subText {
+        margin: 10px 0 18px;
+        color: rgba(15, 23, 42, 0.65);
+        font-weight: 600;
+      }
 
-      .field { text-align: left; margin-bottom: 12px; }
-      .label { display:block; font-size: 12px; font-weight: 800; color: rgba(15,23,42,0.75); margin-bottom: 6px; }
+      .field {
+        text-align: left;
+        margin-bottom: 12px;
+      }
+      .label {
+        display: block;
+        font-size: 12px;
+        font-weight: 800;
+        color: rgba(15, 23, 42, 0.75);
+        margin-bottom: 6px;
+      }
       .inputPro {
         width: 100%;
         padding: 12px 12px;
         border-radius: 12px;
-        border: 1px solid rgba(15,23,42,0.18);
-        background: rgba(255,255,255,0.96);
-        transition: box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease;
+        border: 1px solid rgba(15, 23, 42, 0.18);
+        background: rgba(255, 255, 255, 0.96);
+        transition: box-shadow 160ms ease, border-color 160ms ease,
+          transform 160ms ease;
       }
       .inputPro:focus {
-        border-color: rgba(59,130,246,0.55);
-        box-shadow: 0 0 0 5px rgba(59,130,246,0.18);
+        border-color: rgba(59, 130, 246, 0.55);
+        box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.18);
         transform: translateY(-1px);
       }
 
@@ -474,42 +850,81 @@ function GlobalStyles() {
         transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease;
       }
       .btnPro.primary {
-        background: linear-gradient(135deg, rgba(29,78,216,1), rgba(37,99,235,1));
+        background: linear-gradient(135deg, rgba(29, 78, 216, 1), rgba(37, 99, 235, 1));
         color: white;
-        box-shadow: 0 16px 36px rgba(29,78,216,0.25);
+        box-shadow: 0 16px 36px rgba(29, 78, 216, 0.25);
       }
       .btnPro.secondary {
-        background: rgba(15,23,42,0.06);
-        color: rgba(15,23,42,0.95);
-        border: 1px solid rgba(15,23,42,0.14);
+        background: rgba(15, 23, 42, 0.06);
+        color: rgba(15, 23, 42, 0.95);
+        border: 1px solid rgba(15, 23, 42, 0.14);
       }
-      .btnPro:hover { transform: translateY(-1px); filter: brightness(1.02); }
-      .btnPro:active { transform: translateY(0px); }
+      .btnPro:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.02);
+      }
+      .btnPro:active {
+        transform: translateY(0px);
+      }
 
       .tinyNote {
         margin-top: 12px;
         font-size: 12px;
-        color: rgba(15,23,42,0.55);
+        color: rgba(15, 23, 42, 0.55);
       }
 
       /* ---------- CHAT POLISH (UI only) ---------- */
-      .chatCard { overflow: hidden; }
-      .chatHeader .hdrBtn { transition: transform 140ms ease, box-shadow 140ms ease; }
-      .chatHeader .hdrBtn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,0,0,0.10); }
+      .chatCard {
+        overflow: hidden;
+      }
+      .chatHeader .hdrBtn {
+        transition: transform 140ms ease, box-shadow 140ms ease;
+      }
+      .chatHeader .hdrBtn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
+      }
 
-      .bubble { transition: transform 140ms ease, box-shadow 140ms ease; }
-      .bubble:hover { transform: translateY(-1px); box-shadow: 0 12px 22px rgba(0,0,0,0.10); }
+      .bubble {
+        transition: transform 140ms ease, box-shadow 140ms ease;
+      }
+      .bubble:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 22px rgba(0, 0, 0, 0.1);
+      }
 
-      .composerInput:focus { box-shadow: 0 0 0 5px rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.55); }
+      .composerInput:focus {
+        box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.15);
+        border-color: rgba(59, 130, 246, 0.55);
+      }
 
-      .sendPro { transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease; }
-      .sendPro:hover { transform: translateY(-1px); box-shadow: 0 16px 34px rgba(29,78,216,0.25); filter: brightness(1.02); }
-      .sendPro:active { transform: translateY(0); }
+      .sendPro {
+        transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+      }
+      .sendPro:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 16px 34px rgba(29, 78, 216, 0.25);
+        filter: brightness(1.02);
+      }
+      .sendPro:active {
+        transform: translateY(0);
+      }
 
-      .delBtn { opacity: 0.85; transition: opacity 140ms ease, transform 140ms ease; }
-      .delBtn:hover { opacity: 1; transform: translateY(-1px); }
+      .delBtn {
+        opacity: 0.85;
+        transition: opacity 140ms ease, transform 140ms ease;
+      }
+      .delBtn:hover {
+        opacity: 1;
+        transform: translateY(-1px);
+      }
 
-      .sentinel { text-align: center; font-size: 12px; color: rgba(15,23,42,0.55); padding: 6px 0; }
+      .sentinel {
+        text-align: center;
+        font-size: 12px;
+        color: rgba(15, 23, 42, 0.55);
+        padding: 6px 0;
+      }
     `}</style>
   );
 }
